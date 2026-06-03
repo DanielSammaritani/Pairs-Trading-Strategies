@@ -1,0 +1,214 @@
+import yfinance as yf
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import matplotlib.gridspec as gridspec
+from statsmodels.tsa.stattools import adfuller, coint
+from statsmodels.regression.linear_model import OLS
+from statsmodels.tools import add_constant
+
+BLUE = "#2563EB"
+RED = "#DC2626"
+GREEN = "#16A34A"
+AMBER = "#D97706"
+GRAY = "#687280"
+BG = "#F9FAFB"
+DARK = "#111827"
+
+def scarica_dati (ticker1, ticker2, start="2019-01-01", end="2025-01-01"):
+    # We extract the data as strings, which will give us the
+    # dataframe for our correlation
+    datiG = yf.download([ticker1, ticker2], start=start, end=end, auto_adjust=True, progress=False)["Close"]
+    
+    # % Via the YF APIs we want to retrieve the price lists of the 2 Tickers.
+    # % With auto_adjust True we have a function that adjusts the price excluding dividends and market splits.
+    # % With progress False we disable the loading bar.
+    
+    datiG = datiG[[ticker1, ticker2]] # Reorder columns
+    datiG.columns = [ticker1, ticker2] # Assign names
+    
+    # % The ffill() function selects data with gaps (holidays, untraded asset) and copies the last price,
+    # % while dropna() eliminates rows without data.
+    
+    datiG.ffill(inplace=True)
+    datiG.dropna(inplace=True)
+    return datiG
+
+def test_adf (serie: pd. Series, nome: str) -> dict:
+    # The ADF test proves whether a series has a unit root (is non-stationary)
+    risultato = adfuller (serie, autolag="AIC")
+    
+    stat = risultato [0]
+    pvalue = risultato [1]
+    staz = pvalue < 0.05
+    
+    if staz == True:
+        print (f"The series is stationary, with p-value ({pvalue}) and statistic equal to {stat}")
+        esito = "Stationary"
+    else:
+        # The more negative, the better
+        print(f"The series is non-stationary because ({pvalue}) > 0.05")
+        esito = "Non-Stationary"
+        
+    return {"stat": stat, "pvalue": pvalue, "esito": esito}
+
+def test_cointegrazione (prezzi1, prezzi2, ticker1, ticker2):
+    # THEORY: We transform prices into natural LOGARITHMS.
+    # Log-prices make future returns linearly additive and stabilize long-term variance.
+    log_p1 = np.log(prezzi1)
+    log_p2 = np.log(prezzi2)
+    
+    test_adf (log_p1, ticker1)
+    test_adf (log_p2, ticker2)
+    # We expect False from both
+
+    stat, pvalue, _ = coint (log_p1, log_p2) # We use the underscore because coint returns 3 values;
+    # the changes are not needed
+    
+    coint_ok = pvalue < 0.05
+    
+    if coint_ok:
+        esito = "COINTEGRATED"
+    else:
+        esito = "NON-COINTEGRATED"
+        
+    print (f"Engle-Granger result for {ticker1}/{ticker2}:")
+    print (f"Statistic: {stat} | P-Value: {pvalue} -> {esito}")
+
+    X = add_constant(log_p2)
+    modello = OLS (log_p1, X).fit()
+    beta = modello.params.iloc[1]
+    alpha = modello.params.iloc[0]
+    # Estimates coefficients by minimizing the sum of squared errors
+    # Beta (Hedge Ratio): How many shares of P2 hedge 1 share of P1
+    # Alpha: The constant intercept of the regression line
+    
+    print (f"OLS on Log-Prices: {alpha} | Beta: {beta} | R2 = {modello.rsquared}")
+    return {"p_value": pvalue, "cointegrate": coint_ok, "beta": beta}
+
+def calcola_spread_zscore (prezzi1, prezzi2, beta, finestra=60):
+    log_p1 = np.log(prezzi1) # Transform asset 1 into logarithm
+    log_p2 = np.log(prezzi2) # Transform asset 2 into logarithm
+    
+    # The logarithmic spread is defined as: Spread Log (P1) Beta Log (P2).
+    # Since the stocks are cointegrated, this specific time series will be stationary.
+    # We create a dataframe to work on.
+    df = pd.DataFrame({
+        "P1": prezzi1, "P2": prezzi2,
+        "log_P1": log_p1, "log_P2": log_p2,
+        "spread": log_p1 - beta * log_p2
+    })
+    
+    # The market evolves. Mean and Standard Deviation of the spread are not fixed but change slowly.
+    # We use rolling (window) functions to calculate metrics only on the previous 60 days.
+    df ["media_rolling"] = df ["spread"].rolling (finestra).mean()
+    df ["std_rolling"] = df ["spread"].rolling (finestra).std() # Rolling standard deviation (spread volatility)
+    # The Z-Score standardizes the spread: it tells us how many standard deviations today's spread 
+    # is away from its recent mean. Formula: Z = (Spread - Media_Rolling) / Std_Rolling
+    df ["zscore"] = (df ["spread"] - df ["media_rolling"]) / df ["std_rolling"]
+    df.dropna(inplace=True)
+    return df
+
+def genera_segnali (df, soglia_entrata=2.0, soglia_uscita=0.5):
+    df = df.copy()
+    df ["posizione"] = 0
+    posizione_corrente = 0
+    
+    for i in range(len(df)):
+        z = df ["zscore"].iloc[i]
+        
+        if posizione_corrente == 0: # Searching for market entries
+            if z < -soglia_entrata:
+                posizione_corrente = 1 # LONG Entry
+            elif z > soglia_entrata:
+                posizione_corrente = -1 # SHORT Entry
+        elif posizione_corrente == 1 and z > -soglia_uscita: # Exit condition from LONG position
+            posizione_corrente = 0
+        elif posizione_corrente == -1 and z < soglia_uscita: # Exit condition from SHORT position
+            posizione_corrente = 0
+            
+        df.iloc[i, df.columns.get_loc("posizione")] = posizione_corrente
+        
+    df ["segnale"] = df ["posizione"].diff().fillna(0)
+    return df
+
+def esegui_backtest(df, ticker1, ticker2, beta):
+    df = df.copy()
+    df ["r1"] = df ["log_p1"].diff()
+    df ["r2"] = df ["log_p2"].diff()
+    
+    df ["r_spread"] = df ["r1"] - beta * df ["r2"]
+    # We take the data from the next morning because the signal is generated at today's close
+    # using the shift (1) function
+    df ["r_strat"] = df ["posizione"].shift (1) * df ["r_spread"]
+    df ["r_strat"].fillna(0, inplace=True) # Remove the first value (NaN)
+    df ["r1"] = df ["r1"] .fillna (0) # Remove NaNs from the series as well
+    
+    # We use the cumulative sum of Log-returns and then apply the exponential
+    # to transform data into multipliers
+    df ["Cum_strat"] = np.exp(df ["r_strat"].cumsum())
+    df ["buy-and-hold_strat"] = np.exp(df ["r1"].cumsum())
+    
+    ngiorni = len(df)
+    strat_return = df ["Cum_strat"].iloc[-1] - 1 # Total pairs return
+    bh_return = df["buy-and-hold_strat"].iloc[-1] - 1 # Classic total return
+    
+    # Now we extract the daily mean and annualized volatility of the strategy to find the Sharpe ratio
+    mu_anno = df ["r_strat"].mean() * 252 # (trading days)
+    vol_annua = df ["r_strat"].std() * np.sqrt(252)
+    
+    if vol_annua > 0:
+        sharpe = mu_anno / vol_annua
+    else:
+        sharpe = 0
+        
+    # We find the maximum drawdown of the portfolio
+    cum = df ["Cum_strat"]
+    rolling_max = cum.cummax()
+    drawdown = (cum - rolling_max) / rolling_max
+    max_dd = drawdown.min()
+    
+    n_trade = (df ["segnale"].abs() > 0).sum()
+    
+    print (f"Quantity of trades: {n_trade}")
+    print (f"Pairs trading return: {strat_return}")
+    print (f"Buy & Hold return: {bh_return}")
+    
+    # Save metrics
+    df.attrs ["metriche"] = {
+        "total return": strat_return,
+        "buy-and-hold": bh_return,
+        "sharpe": sharpe,
+        "max-drawdown": max_dd,
+        "n-trade": n_trade
+    }
+    return df
+
+def main():
+    TICKER1 = "CVX"
+    TICKER2 = "XOM"
+    
+    dati = scarica_dati (TICKER1, TICKER2, "2019-01-01", "2024-01-01")
+    
+    # PHASE 2: Execution of statistical analysis and cointegration tests
+    risultato_stat = test_cointegrazione (dati [TICKER1], dati [TICKER2], TICKER1, TICKER2)
+    beta = risultato_stat ["beta"] # Saves the optimal coefficient extracted from the OLS regression
+    
+    # PHASE 3: Construction of the historical spread and normalization into rolling Z-Score
+    df = calcola_spread_zscore (dati [TICKER1], dati [TICKER2], beta, finestra=60)
+    
+    # PHASE 4: Empirical verification. If previous calculations are correct, the spread MUST be stationary.
+    print("\nADF Test on the logarithmic (stationary) SPREAD:")
+    test_adf (df ["spread"], "spread")
+    
+    # PHASE 5: Chronological generation of operational signals based on strategy rules
+    df = genera_segnali (df, soglia_entrata=2.0, soglia_uscita=0.5)
+    
+    # PHASE 6: Historical portfolio simulation (Backtest) and Sharpe Ratio Drawdown calculation
+    df = esegui_backtest(df, TICKER1, TICKER2, beta)
+    
+    # PHASE 7: Generation of the final graphic dashboard
+    plot_risultati (df, TICKER1, TICKER2, df.attrs ["metriche"])
+
+if __name__ == "__main__":
+    main()
