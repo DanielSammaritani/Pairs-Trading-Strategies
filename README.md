@@ -1,15 +1,129 @@
-# Pairs-Trading-Strategies
+# 📊 Pairs-Trading-Strategies
+
 High School final year project.
 
+---
 
-# Pairs-Trading-Strategies
-High School final year project.
+## 📝 Overview
 
-This repository contains a Quantitative Finance project focused on implementing a Market-Neutral Pairs Trading Strategy using statistical arbitrage, cointegration analysis, and time-series modeling in Python.  The strategy exploits temporary price divergences between two highly correlated assets operating within the same macroeconomic sector. By buying the undervalued asset and short-selling the overvalued one, the strategy aims to profit from the eventual mean reversion (realignment) of their prices, regardless of overall market direction.  📈 Strategy OverviewThe quantitative framework is built on the following core steps:Logarithmic Transformation: Asset prices are converted to natural logarithms to stabilize variance over the long term and make returns linearly additive.  Stationarity & Cointegration Testing: * An Augmented Dickey-Fuller (ADF) Test is used to check the stationarity of individual asset price series.  The Engle-Granger Two-Step Method checks for a structural, non-random linear combination between the assets.  OLS Regression & Hedge Ratio: Ordinary Least Squares (OLS) regression estimates the optimal Hedge Ratio ($\beta$) to construct a market-neutral portfolio.  Dynamic Z-Score Spread: The log-price spread is monitored using a 60-day rolling mean and standard deviation to compute a dynamic Z-Score.  🛠 Trading Signals MatrixThe algorithm enters and exits positions based on the standard deviation thresholds of the Z-Score:  Z-Score ConditionActionPortfolio State$Z < -2.0$Long Asset 1 / Short Asset 2   Spread is depressed; bet on expansion.  $Z > +2.0$Short Asset 1 / Long Asset 2   Spread is wide; bet on convergence.  Reaching $\pm0.5$Close Position   Return to normalcy window.  📊 Empirical Case Study: CVX vs. XOMThe strategy was validated through a historical backtest from 2019 to 2024 using two major assets in the fossil fuel sector:  Asset 1 ($P_1$): Chevron Corporation (CVX)   Asset 2 ($P_2$): Exxon Mobil Corporation (XOM)   Performance ResultsTotal Strategy Return: +56.9%   Sharpe Ratio: 0.64   Maximum Drawdown: -22.2%   The strategy outperformed a classic benchmark Buy & Hold strategy on CVX by roughly 7% (gross of transaction fees). Notably, the strategy proved highly profitable during the 2020 COVID-19 oil crisis due to its market-neutral behavior, though performance flattened from 2022 onwards as the spread normalized.  💻 Project StructurePlaintext├── Progetto Daniel Sammaritani.pdf   # Full project documentation
+This repository contains a **Quantitative Finance** project focused on implementing a **Market-Neutral Pairs Trading Strategy** using statistical arbitrage, cointegration analysis, and time-series modeling.
+
+The strategy identifies pairs of correlated assets and exploits temporary deviations from their long-term relationship to generate market-neutral returns.
+
+---
+
+## 📂 Project Structure
+
+```
+Pairs-Trading-Strategies/
 ├── pairs_trading.py                 # Core Python implementation script
-└── README.md                        # Project overview and guide
-Key Python Libraries Usedyfinance - Historical market data retrieval   pandas & numpy - Data manipulation and vectorization   statsmodels - ADF test, Engle-Granger cointegration, and OLS regression   matplotlib - Advanced dashboard visualization   🚀 How to Run the ProjectClone the repository:Bashgit clone https://github.com/your-username/pairs-trading-cointegration.git
-cd pairs-trading-cointegration
-Install dependencies:Bashpip install yfinance pandas numpy statsmodels matplotlib
-Execute the backtest:Bashpython pairs_trading.py
-📌 Main Dashboard VisualizationWhen running the algorithm, a 4-pane visual dashboard is generated:  Normalized Prices (Base 100): Visual correlation check of CVX and XOM.  Logarithmic Spread: Tracks the long-term equilibrium with $\pm2\sigma$ rolling bands.  Z-Score & Signals: Pinpoints exact entry (Long/Short) and exit triggers.  Cumulative Performance: Side-by-side equity curve comparison against Buy & Hold.  Disclaimer: This project was developed for academic and educational purposes. Past performance is not indicative of future financial results. Trading strategies involve significant risk.
+├── README.md                        # Project overview and guide
+└── data/                            # Market data storage
+```
+
+---
+
+## 🛠️ Key Python Libraries Used
+
+- **yfinance** - Historical market data retrieval
+- **pandas & numpy** - Data manipulation and vectorization
+- **statsmodels** - ADF test, Engle-Granger cointegration, and OLS regression
+- **matplotlib** - Visualization and dashboard creation
+
+---
+
+## 🚀 Getting Started
+
+### Prerequisites
+
+Make sure you have Python 3.7+ installed on your system.
+
+### Installation
+
+Clone the repository:
+
+```bash
+git clone https://github.com/DanielSammaritani/Pairs-Trading-Strategies.git
+cd Pairs-Trading-Strategies
+```
+
+Install dependencies:
+
+```bash
+pip install yfinance pandas numpy statsmodels matplotlib
+```
+
+### Execute the Backtest
+
+Run the strategy:
+
+```bash
+python pairs_trading.py
+```
+
+---
+
+## 📌 Main Dashboard Visualization
+
+When running the algorithm, a **4-pane visual dashboard** is generated:
+
+1. **Normalized Prices (Base 100)** - Visual correlation check of the asset pair (e.g., CVX and XOM)
+2. **Logarithmic Spread** - Tracks the spread between cointegrated assets
+3. **Trading Signals** - Buy/sell signals generated by the strategy
+4. **Cumulative Returns** - Performance metrics and profit/loss visualization
+
+---
+
+## 💡 Strategy Overview
+
+### Key Concepts
+
+- **Cointegration** - Statistical relationship where two non-stationary series move together
+- **ADF Test** - Augmented Dickey-Fuller test to check for stationarity
+- **Spread Trading** - Exploit price divergence between paired assets
+- **Market Neutral** - Strategy aims to be independent of market direction
+
+### Trading Logic
+
+1. Identify cointegrated pairs of assets
+2. Calculate the spread between normalized prices
+3. Generate buy signals when spread is too wide (oversold)
+4. Generate sell signals when spread returns to mean (overbought)
+5. Exit positions when the spread mean-reverts
+
+---
+
+## 📈 Results & Performance
+
+The backtest generates:
+- ✅ Historical performance metrics
+- ✅ Win rate and Sharpe ratio
+- ✅ Maximum drawdown analysis
+- ✅ Visual dashboard with all key indicators
+
+---
+
+## 📚 Resources & References
+
+- [Engle-Granger Cointegration](https://en.wikipedia.org/wiki/Cointegration)
+- [Pairs Trading Strategy](https://en.wikipedia.org/wiki/Pairs_trading)
+- [Statistical Arbitrage](https://en.wikipedia.org/wiki/Statistical_arbitrage)
+
+---
+
+## ⚠️ Disclaimer
+
+This project is for educational purposes only. Trading strategies involve risk, including potential loss of capital. Always conduct thorough backtesting and paper trading before live trading.
+
+---
+
+## 📄 License
+
+This project is open source and available under the MIT License.
+
+---
+
+## 👤 Author
+
+**Daniel Sammaritani** - High School Quantitative Finance Project
+
